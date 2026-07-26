@@ -1,11 +1,315 @@
-<div class="dashboard">
+@if (showIntroLoader()) {
+  <div class="intro-loader" [class.intro-loader--leaving]="loaderLeaving()" [style.transition-duration.ms]="loaderFadeMs">
+    <div class="intro-loader__grid"></div>
+
+    <div class="intro-loader__core">
+      <div class="intro-loader__ring intro-loader__ring--outer"></div>
+      <div class="intro-loader__ring intro-loader__ring--inner"></div>
+      <div class="intro-loader__ring intro-loader__ring--dashed"></div>
+      <span class="intro-loader__mark">FP</span>
+    </div>
+
+    <p class="intro-loader__title">Financial Portfolio</p>
+    <p class="intro-loader__status">{{ loaderStatusText() }}</p>
+
+    <div class="intro-loader__progress-track">
+      <div class="intro-loader__progress-fill" [style.animation-duration.ms]="minLoaderMs"></div>
+    </div>
+  </div>
+}
+
+<div class="dashboard" [class.dashboard--visible]="contentVisible()">
   <header class="dashboard__header">
     <span class="dashboard__mark">FP</span>
     <button type="button" class="btn-ghost" (click)="logout()">Sign out</button>
   </header>
 
   <main class="dashboard__content">
-    <h1>Dashboard</h1>
-    <p>Your portfolio overview will live here.</p>
+    @if (loadingAccounts()) {
+      <section class="dashboard__section">
+        <h2>Accounts</h2>
+        <div class="account-grid">
+          @for (i of [1, 2, 3]; track i) {
+            <div class="account-card account-card--skeleton"></div>
+          }
+        </div>
+      </section>
+    } @else if (accountsError()) {
+      <div class="dashboard__alert">{{ accountsError() }}</div>
+    } @else if (!hasAccounts()) {
+      <div class="empty-state">
+        <div class="empty-state__mark">FP</div>
+        <h2>No accounts yet</h2>
+        <p>Once you connect a bank account, your balances and transactions will show up here.</p>
+      </div>
+    } @else {
+      <section class="net-worth-bar">
+        <div class="net-worth-bar__main">
+          <span class="net-worth-bar__label">Net Worth</span>
+          <span class="net-worth-bar__value">{{ netWorth() | currency: 'USD' }}</span>
+        </div>
+        <div class="net-worth-bar__breakdown">
+          <div class="net-worth-bar__stat">
+            <span class="net-worth-bar__stat-label">Total Assets</span>
+            <span class="net-worth-bar__stat-value amount--credit">{{ totalAssets() | currency: 'USD' }}</span>
+          </div>
+          <div class="net-worth-bar__stat">
+            <span class="net-worth-bar__stat-label">Total Liabilities</span>
+            <span class="net-worth-bar__stat-value amount--debit">{{ totalLiabilities() | currency: 'USD' }}</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="dashboard__section">
+        <h2>Accounts</h2>
+
+        <div class="filter-chips">
+          @for (filter of accountFilters; track filter.value) {
+            <button
+              type="button"
+              class="filter-chip"
+              [class.filter-chip--active]="accountFilter() === filter.value"
+              (click)="setAccountFilter(filter.value)"
+            >
+              {{ filter.label }}
+            </button>
+          }
+        </div>
+
+        @if (institutionGroups().length === 0) {
+          <p class="dashboard__empty-note">No accounts match this filter.</p>
+        } @else {
+          <div class="institution-groups">
+            @for (group of institutionGroups(); track group.institution.id) {
+              <div class="institution-group">
+                <button
+                  type="button"
+                  class="institution-group__header"
+                  (click)="toggleInstitution(group.institution.id)"
+                >
+                  <svg
+                    class="institution-group__chevron"
+                    [class.institution-group__chevron--collapsed]="isInstitutionCollapsed(group.institution.id)"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                  <span class="institution-group__name">{{ group.institution.name }}</span>
+                  <span
+                    class="institution-group__subtotal"
+                    [class.amount--debit]="group.subtotal < 0"
+                    [class.amount--credit]="group.subtotal >= 0"
+                  >
+                    {{ group.subtotal | currency: 'USD' }}
+                  </span>
+                </button>
+
+                @if (!isInstitutionCollapsed(group.institution.id)) {
+                  <div class="account-grid">
+                    @for (account of group.accounts; track account.id) {
+                      <div class="account-card">
+                        <h3 class="account-card__name">{{ account.name }}</h3>
+                        <span class="account-card__type">{{ accountTypeLabel(account.type) }}</span>
+                        <span
+                          class="account-card__balance"
+                          [class.amount--debit]="account.currentBalance < 0"
+                          [class.amount--credit]="account.currentBalance >= 0"
+                        >
+                          {{ account.currentBalance | currency: account.currency }}
+                        </span>
+                        <span class="account-card__updated">{{ formatRelativeTime(account.updatedAt) }}</span>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      </section>
+
+      <section class="dashboard__section insights">
+        <div class="insights__category-card">
+          <div class="insights__card-header">
+            <h2>Spending by Category</h2>
+            <span class="insights__period-label">Month to date</span>
+          </div>
+          @if (loadingInsights()) {
+            <div class="donut-layout">
+              <div class="donut-chart donut-chart--skeleton"></div>
+              <div class="donut-legend">
+                @for (i of [1, 2, 3, 4]; track i) {
+                  <div class="donut-legend__row donut-legend__row--skeleton"></div>
+                }
+              </div>
+            </div>
+          } @else if (insightsError()) {
+            <p class="dashboard__empty-note">{{ insightsError() }}</p>
+          } @else if (donutSegments().length === 0) {
+            <p class="dashboard__empty-note">No spending yet.</p>
+          } @else {
+            <div class="donut-layout">
+              <div class="donut-chart">
+                <div class="donut-chart__ring" [style.background]="donutGradient()"></div>
+                <div class="donut-chart__hole">
+                  <span class="donut-chart__total">{{ totalSpend() | currency: 'USD' : 'symbol' : '1.0-0' }}</span>
+                  <span class="donut-chart__total-label">Total spend</span>
+                </div>
+              </div>
+
+              <div class="donut-legend">
+                @for (segment of donutSegments(); track segment.category) {
+                  <div class="donut-legend__row">
+                    <span class="donut-legend__swatch" [style.background]="segment.color"></span>
+                    <span class="donut-legend__label">{{ segment.category }}</span>
+                    <span class="donut-legend__percent">{{ segment.percent | number: '1.0-0' }}%</span>
+                    <span class="donut-legend__amount">{{ segment.total | currency: 'USD' : 'symbol' : '1.0-0' }}</span>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+
+        <div class="insights__month-card">
+          <div class="insights__card-header">
+            <h2>This Month vs Last Month</h2>
+          </div>
+          @if (loadingInsights()) {
+            <div class="month-compare month-compare--skeleton">
+              <div class="month-compare__row-skeleton"></div>
+              <div class="month-compare__row-skeleton"></div>
+            </div>
+          } @else if (insightsError()) {
+            <p class="dashboard__empty-note">{{ insightsError() }}</p>
+          } @else {
+            <div class="month-compare">
+              <div class="month-compare__row">
+                <div class="month-compare__row-header">
+                  <span class="month-compare__label">This month</span>
+                  <span class="month-compare__value">{{ monthComparison().thisMonthSpend | currency: 'USD' : 'symbol' : '1.0-0' }}</span>
+                </div>
+                <div class="month-compare__track">
+                  <div
+                    class="month-compare__fill month-compare__fill--current"
+                    [style.width.%]="monthBarWidth(monthComparison().thisMonthSpend)"
+                  ></div>
+                </div>
+              </div>
+
+              <div class="month-compare__row">
+                <div class="month-compare__row-header">
+                  <span class="month-compare__label">Last month</span>
+                  <span class="month-compare__value">{{ monthComparison().lastMonthSpend | currency: 'USD' : 'symbol' : '1.0-0' }}</span>
+                </div>
+                <div class="month-compare__track">
+                  <div
+                    class="month-compare__fill month-compare__fill--previous"
+                    [style.width.%]="monthBarWidth(monthComparison().lastMonthSpend)"
+                  ></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="month-delta">
+              @if (monthComparison().percentChange === null) {
+                <span class="month-delta-badge month-delta-badge--neutral">No prior month data</span>
+              } @else if (monthComparison().difference > 0) {
+                <span class="month-delta-badge month-delta-badge--bad">
+                  &#9650; {{ monthComparison().percentChange | number: '1.0-0' }}% more
+                </span>
+              } @else if (monthComparison().difference < 0) {
+                <span class="month-delta-badge month-delta-badge--good">
+                  &#9660; {{ -(monthComparison().percentChange ?? 0) | number: '1.0-0' }}% less
+                </span>
+              } @else {
+                <span class="month-delta-badge month-delta-badge--neutral">No change</span>
+              }
+              <span class="month-delta__caption">than last month</span>
+            </div>
+          }
+        </div>
+      </section>
+
+      <section class="dashboard__section">
+        <div class="dashboard__section-header">
+          <h2>Transactions</h2>
+          @if (transactionsPage(); as page) {
+            <span class="dashboard__section-count">{{ page.totalElements }} total</span>
+          }
+        </div>
+
+        @if (loadingTransactions() && !hasLoadedTransactionsOnce()) {
+          <div class="transaction-list">
+            @for (i of [1, 2, 3, 4]; track i) {
+              <div class="transaction-row transaction-row--skeleton"></div>
+            }
+          </div>
+        } @else if (transactionsError()) {
+          <div class="dashboard__alert">{{ transactionsError() }}</div>
+        } @else if (transactionsPage(); as page) {
+          @if (page.items.length === 0) {
+            <p class="dashboard__empty-note">No transactions yet.</p>
+          } @else {
+            <div class="transaction-list" [class.transaction-list--loading]="loadingTransactions()">
+              @for (transaction of page.items; track transaction.id) {
+                <div class="transaction-row">
+                  <div class="transaction-row__main">
+                    <span class="transaction-row__description">{{ transaction.description }}</span>
+                    <div class="transaction-row__meta">
+                      @if (transaction.category) {
+                        <span class="transaction-row__category">{{ transaction.category }}</span>
+                      }
+                      @if (transaction.pending) {
+                        <span class="badge-pending">Pending</span>
+                      }
+                    </div>
+                  </div>
+                  <div class="transaction-row__figures">
+                    <span
+                      class="transaction-row__amount"
+                      [class.amount--debit]="transaction.amount < 0"
+                      [class.amount--credit]="transaction.amount >= 0"
+                    >
+                      {{ transaction.amount >= 0 ? '+' : '' }}{{ transaction.amount | currency: accountCurrency(transaction) }}
+                    </span>
+                    <span class="transaction-row__date">{{ transaction.transactionDate | date: 'MMM d, y' }}</span>
+                  </div>
+                </div>
+              }
+            </div>
+
+            @if (page.totalPages > 1) {
+              <div class="pagination">
+                <button
+                  type="button"
+                  class="btn-ghost"
+                  [disabled]="currentPage() === 0 || loadingTransactions()"
+                  (click)="goToPage(currentPage() - 1)"
+                >
+                  Previous
+                </button>
+                <span class="pagination__label">Page {{ currentPage() + 1 }} of {{ page.totalPages }}</span>
+                <button
+                  type="button"
+                  class="btn-ghost"
+                  [disabled]="currentPage() + 1 >= page.totalPages || loadingTransactions()"
+                  (click)="goToPage(currentPage() + 1)"
+                >
+                  Next
+                </button>
+              </div>
+            }
+          }
+        }
+      </section>
+    }
   </main>
 </div>
