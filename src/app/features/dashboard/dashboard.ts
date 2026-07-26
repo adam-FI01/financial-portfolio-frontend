@@ -24,6 +24,51 @@ interface CategoryTotal {
   total: number;
 }
 
+interface DonutSegment {
+  category: string;
+  total: number;
+  percent: number;
+  color: string;
+}
+
+// Validated categorical palette (dark-mode steps), skipping the palette's green
+// slot since green is reserved elsewhere in this app for CTAs/success states.
+// Passes all six dataviz checks (lightness, chroma, CVD, contrast) against our
+// dark surface — see the palette validation run for this feature.
+const DONUT_COLORS = [
+  '#3987e5', // blue
+  '#d95926', // orange
+  '#199e70', // aqua
+  '#c98500', // yellow
+  '#d55181', // magenta
+  '#9085e9', // violet
+  '#e66767' // red
+];
+const DONUT_OTHER_COLOR = '#6b7280'; // neutral gray — matches --color-text-tertiary
+const DONUT_MAX_SEGMENTS = DONUT_COLORS.length;
+
+type AccountFilterValue = 'ALL' | AccountType;
+
+interface AccountFilterOption {
+  label: string;
+  value: AccountFilterValue;
+}
+
+interface InstitutionGroup {
+  institution: Institution;
+  accounts: Account[];
+  subtotal: number;
+}
+
+const ACCOUNT_FILTERS: AccountFilterOption[] = [
+  { label: 'All', value: 'ALL' },
+  { label: 'Checking', value: 'CHECKING' },
+  { label: 'Savings', value: 'SAVINGS' },
+  { label: 'Credit Cards', value: 'CREDIT_CARD' },
+  { label: 'Loans', value: 'LOAN' },
+  { label: 'Investments', value: 'INVESTMENT' }
+];
+
 interface MonthComparison {
   thisMonthSpend: number;
   lastMonthSpend: number;
@@ -33,6 +78,11 @@ interface MonthComparison {
 
 function yearMonthKey(dateStr: string): string {
   return dateStr.slice(0, 7); // "YYYY-MM-DD" -> "YYYY-MM"
+}
+
+function currentMonthKey(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
 @Component({
@@ -62,6 +112,7 @@ export class Dashboard implements OnInit, OnDestroy {
 
   readonly transactionsPage = signal<PageResponse<Transaction> | null>(null);
   readonly loadingTransactions = signal(true);
+  readonly hasLoadedTransactionsOnce = signal(false);
   readonly transactionsError = signal<string | null>(null);
   readonly currentPage = signal(0);
 
@@ -69,9 +120,34 @@ export class Dashboard implements OnInit, OnDestroy {
   readonly loadingInsights = signal(true);
   readonly insightsError = signal<string | null>(null);
 
+  readonly accountFilters = ACCOUNT_FILTERS;
+  readonly accountFilter = signal<AccountFilterValue>('ALL');
+  readonly collapsedInstitutions = signal<Set<string>>(new Set());
+
   readonly hasAccounts = computed(() => this.accounts().length > 0);
-  readonly institutionsById = computed(() => new Map(this.institutions().map((i) => [i.id, i])));
   readonly accountsById = computed(() => new Map(this.accounts().map((a) => [a.id, a])));
+
+  readonly filteredAccounts = computed(() => {
+    const filter = this.accountFilter();
+    return filter === 'ALL' ? this.accounts() : this.accounts().filter((a) => a.type === filter);
+  });
+
+  readonly institutionGroups = computed<InstitutionGroup[]>(() => {
+    const byInstitution = new Map<string, Account[]>();
+    for (const account of this.filteredAccounts()) {
+      const list = byInstitution.get(account.institutionId) ?? [];
+      list.push(account);
+      byInstitution.set(account.institutionId, list);
+    }
+
+    return this.institutions()
+      .filter((institution) => byInstitution.has(institution.id))
+      .map((institution) => {
+        const accounts = byInstitution.get(institution.id)!;
+        const subtotal = accounts.reduce((sum, a) => sum + a.currentBalance, 0);
+        return { institution, accounts, subtotal };
+      });
+  });
 
   readonly totalAssets = computed(() =>
     this.accounts()
@@ -88,9 +164,10 @@ export class Dashboard implements OnInit, OnDestroy {
   readonly netWorth = computed(() => this.totalAssets() - this.totalLiabilities());
 
   readonly spendingByCategory = computed<CategoryTotal[]>(() => {
+    const monthKey = currentMonthKey();
     const totals = new Map<string, number>();
     for (const t of this.allTransactions()) {
-      if (t.amount >= 0) {
+      if (t.amount >= 0 || yearMonthKey(t.transactionDate) !== monthKey) {
         continue;
       }
       const key = t.category ?? 'Uncategorized';
@@ -101,11 +178,66 @@ export class Dashboard implements OnInit, OnDestroy {
       .sort((a, b) => b.total - a.total);
   });
 
-  readonly maxCategoryTotal = computed(() => this.spendingByCategory()[0]?.total ?? 0);
+  readonly totalSpend = computed(() => this.spendingByCategory().reduce((sum, row) => sum + row.total, 0));
+
+  readonly donutSegments = computed<DonutSegment[]>(() => {
+    const rows = this.spendingByCategory();
+    const total = this.totalSpend();
+    if (total === 0) {
+      return [];
+    }
+
+    const primaryCount = Math.min(rows.length, DONUT_MAX_SEGMENTS);
+    const segments = rows.slice(0, primaryCount).map((row, i) => ({
+      category: row.category,
+      total: row.total,
+      percent: (row.total / total) * 100,
+      color: DONUT_COLORS[i]
+    }));
+
+    const rest = rows.slice(primaryCount);
+    if (rest.length > 0) {
+      const restTotal = rest.reduce((sum, row) => sum + row.total, 0);
+      segments.push({
+        category: 'Other',
+        total: restTotal,
+        percent: (restTotal / total) * 100,
+        color: DONUT_OTHER_COLOR
+      });
+    }
+
+    return segments;
+  });
+
+  readonly donutGradient = computed(() => {
+    const segments = this.donutSegments();
+    if (segments.length === 0) {
+      return 'transparent';
+    }
+    if (segments.length === 1) {
+      return segments[0].color;
+    }
+
+    const gapDeg = 2.5;
+    let cursor = 0;
+    const stops: string[] = [];
+
+    for (const segment of segments) {
+      const sweep = (segment.percent / 100) * 360;
+      const start = cursor;
+      const end = cursor + sweep;
+      const gapStart = Math.max(start, end - gapDeg);
+      stops.push(`${segment.color} ${start}deg ${gapStart}deg`);
+      stops.push(`var(--color-surface) ${gapStart}deg ${end}deg`);
+      cursor = end;
+    }
+
+    return `conic-gradient(${stops.join(', ')})`;
+  });
 
   readonly monthComparison = computed<MonthComparison>(() => {
     const now = new Date();
-    const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const thisMonthKey = currentMonthKey();
     const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastMonthKey = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`;
 
@@ -153,12 +285,32 @@ export class Dashboard implements OnInit, OnDestroy {
     this.router.navigateByUrl('/login');
   }
 
-  institutionName(account: Account): string {
-    return this.institutionsById().get(account.institutionId)?.name ?? 'Unknown institution';
+  setAccountFilter(value: AccountFilterValue): void {
+    this.accountFilter.set(value);
+  }
+
+  toggleInstitution(institutionId: string): void {
+    const next = new Set(this.collapsedInstitutions());
+    if (next.has(institutionId)) {
+      next.delete(institutionId);
+    } else {
+      next.add(institutionId);
+    }
+    this.collapsedInstitutions.set(next);
+  }
+
+  isInstitutionCollapsed(institutionId: string): boolean {
+    return this.collapsedInstitutions().has(institutionId);
   }
 
   accountCurrency(transaction: Transaction): string {
     return this.accountsById().get(transaction.accountId)?.currency ?? 'USD';
+  }
+
+  monthBarWidth(value: number): number {
+    const { thisMonthSpend, lastMonthSpend } = this.monthComparison();
+    const max = Math.max(thisMonthSpend, lastMonthSpend);
+    return max > 0 ? (value / max) * 100 : 0;
   }
 
   accountTypeLabel(type: AccountType): string {
@@ -190,7 +342,7 @@ export class Dashboard implements OnInit, OnDestroy {
 
   goToPage(page: number): void {
     const page_ = this.transactionsPage();
-    if (page < 0 || (page_ && page >= page_.totalPages)) {
+    if (this.loadingTransactions() || page < 0 || (page_ && page >= page_.totalPages)) {
       return;
     }
     this.currentPage.set(page);
@@ -257,6 +409,7 @@ export class Dashboard implements OnInit, OnDestroy {
       next: (result) => {
         this.transactionsPage.set(result);
         this.loadingTransactions.set(false);
+        this.hasLoadedTransactionsOnce.set(true);
       },
       error: () => {
         this.transactionsError.set("Couldn't load your transactions. Please try again.");

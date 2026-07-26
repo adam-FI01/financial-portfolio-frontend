@@ -1,0 +1,17 @@
+// Shared breakpoint scale: 375, 576, 768, 992, 1200+
+// Max values sit 1px below the next breakpoint's min so ranges never overlap.
+// xl has no max — it's the open-ended top of the scale.
+
+$xs-min: 375px;
+$xs-max: 575px;
+
+$sm-min: 576px;
+$sm-max: 767px;
+
+$md-min: 768px;
+$md-max: 991px;
+
+$lg-min: 992px;
+$lg-max: 1199px;
+
+$xl-min: 1200px;
