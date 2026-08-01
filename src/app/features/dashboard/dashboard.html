@@ -19,10 +19,7 @@
 }
 
 <div class="dashboard" [class.dashboard--visible]="contentVisible()">
-  <header class="dashboard__header">
-    <span class="dashboard__mark">FP</span>
-    <button type="button" class="btn-ghost" (click)="logout()">Sign out</button>
-  </header>
+  <app-header />
 
   <main class="dashboard__content">
     @if (loadingAccounts()) {
@@ -125,6 +122,41 @@
                           {{ account.currentBalance | currency: account.currency }}
                         </span>
                         <span class="account-card__updated">{{ formatRelativeTime(account.updatedAt) }}</span>
+
+                        @if (creditUtilization(account); as util) {
+                          <div class="credit-utilization">
+                            <div class="credit-utilization__track">
+                              <div
+                                class="credit-utilization__fill"
+                                [class.credit-utilization__fill--high]="isHighUtilization(util)"
+                                [style.width.%]="util.percent"
+                              ></div>
+                            </div>
+                            <span class="credit-utilization__label">
+                              {{ util.percent | number: '1.0-0' }}% utilized —
+                              {{ util.balanceMagnitude | currency: account.currency }} of
+                              {{ util.limit | currency: account.currency }}
+                            </span>
+                          </div>
+                        }
+
+                        @if (account.type === 'INVESTMENT' && !loadingHoldings()) {
+                          <div class="investment-preview">
+                            @for (holding of topHoldingsForAccount(account.id); track holding.id) {
+                              <div class="investment-preview__row">
+                                <span class="investment-preview__symbol">{{ holding.symbol }}</span>
+                                <span class="investment-preview__value">{{ holding.currentValue | currency: account.currency : 'symbol' : '1.0-0' }}</span>
+                              </div>
+                            }
+                            <a
+                              [routerLink]="['/investments']"
+                              [queryParams]="{ accountId: account.id }"
+                              class="investment-preview__link"
+                            >
+                              View full portfolio →
+                            </a>
+                          </div>
+                        }
                       </div>
                     }
                   </div>
@@ -142,11 +174,11 @@
             <span class="insights__period-label">Month to date</span>
           </div>
           @if (loadingInsights()) {
-            <div class="donut-layout">
-              <div class="donut-chart donut-chart--skeleton"></div>
-              <div class="donut-legend">
+            <div class="donut-skeleton">
+              <div class="donut-skeleton__circle"></div>
+              <div class="donut-skeleton__legend">
                 @for (i of [1, 2, 3, 4]; track i) {
-                  <div class="donut-legend__row donut-legend__row--skeleton"></div>
+                  <div class="donut-skeleton__row"></div>
                 }
               </div>
             </div>
@@ -155,26 +187,11 @@
           } @else if (donutSegments().length === 0) {
             <p class="dashboard__empty-note">No spending yet.</p>
           } @else {
-            <div class="donut-layout">
-              <div class="donut-chart">
-                <div class="donut-chart__ring" [style.background]="donutGradient()"></div>
-                <div class="donut-chart__hole">
-                  <span class="donut-chart__total">{{ totalSpend() | currency: 'USD' : 'symbol' : '1.0-0' }}</span>
-                  <span class="donut-chart__total-label">Total spend</span>
-                </div>
-              </div>
-
-              <div class="donut-legend">
-                @for (segment of donutSegments(); track segment.category) {
-                  <div class="donut-legend__row">
-                    <span class="donut-legend__swatch" [style.background]="segment.color"></span>
-                    <span class="donut-legend__label">{{ segment.category }}</span>
-                    <span class="donut-legend__percent">{{ segment.percent | number: '1.0-0' }}%</span>
-                    <span class="donut-legend__amount">{{ segment.total | currency: 'USD' : 'symbol' : '1.0-0' }}</span>
-                  </div>
-                }
-              </div>
-            </div>
+            <app-donut-chart
+              [segments]="donutSegments()"
+              [centerValue]="totalSpend() | currency: 'USD' : 'symbol' : '1.0-0'"
+              centerLabel="Total spend"
+            />
           }
         </div>
 
@@ -246,6 +263,22 @@
           }
         </div>
 
+        <div class="transaction-filters">
+          <input
+            type="text"
+            class="transaction-filters__search"
+            placeholder="Search transactions…"
+            [value]="searchQuery()"
+            (input)="onSearchInput($event)"
+          />
+          <select class="transaction-filters__category" [value]="selectedCategory() ?? ''" (change)="onCategoryChange($event)">
+            <option value="">All categories</option>
+            @for (category of availableCategories(); track category) {
+              <option [value]="category">{{ category }}</option>
+            }
+          </select>
+        </div>
+
         @if (loadingTransactions() && !hasLoadedTransactionsOnce()) {
           <div class="transaction-list">
             @for (i of [1, 2, 3, 4]; track i) {
@@ -256,7 +289,9 @@
           <div class="dashboard__alert">{{ transactionsError() }}</div>
         } @else if (transactionsPage(); as page) {
           @if (page.items.length === 0) {
-            <p class="dashboard__empty-note">No transactions yet.</p>
+            <p class="dashboard__empty-note">
+              {{ hasActiveTransactionFilters() ? 'No transactions match your filters.' : 'No transactions yet.' }}
+            </p>
           } @else {
             <div class="transaction-list" [class.transaction-list--loading]="loadingTransactions()">
               @for (transaction of page.items; track transaction.id) {

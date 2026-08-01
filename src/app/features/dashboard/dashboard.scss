@@ -169,52 +169,6 @@
   }
 }
 
-.dashboard__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.25rem 2rem;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.dashboard__mark {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent-muted);
-  border: 1px solid var(--color-accent-border);
-  color: var(--color-accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.7rem;
-  font-weight: 600;
-}
-
-.btn-ghost {
-  background: transparent;
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-text-secondary);
-  border-radius: var(--radius-sm);
-  padding: 0.5rem 0.875rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    color 0.15s ease;
-}
-
-.btn-ghost:hover:not(:disabled) {
-  border-color: var(--color-text-secondary);
-  color: var(--color-text-primary);
-}
-
-.btn-ghost:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 .dashboard__content {
   flex: 1;
   width: 100%;
@@ -367,6 +321,7 @@
 }
 
 .account-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
@@ -412,6 +367,75 @@
   font-size: 0.6875rem;
   color: var(--color-text-tertiary);
   margin-top: 0.5rem;
+}
+
+/* Credit utilization */
+
+.credit-utilization {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: 0.75rem;
+}
+
+.credit-utilization__track {
+  height: 5px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.credit-utilization__fill {
+  height: 100%;
+  background: var(--color-text-secondary);
+}
+
+.credit-utilization__fill--high {
+  background: var(--color-danger);
+  opacity: 0.85;
+}
+
+.credit-utilization__label {
+  font-size: 0.6875rem;
+  color: var(--color-text-tertiary);
+}
+
+/* Investment account preview (top holdings + link to /investments) */
+
+.investment-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: 0.875rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.investment-preview__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8125rem;
+}
+
+.investment-preview__symbol {
+  color: var(--color-text-secondary);
+}
+
+.investment-preview__value {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.investment-preview__link {
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.investment-preview__link:hover {
+  text-decoration: underline;
 }
 
 /* Net worth summary bar */
@@ -516,107 +540,31 @@
   color: var(--color-text-tertiary);
 }
 
-.donut-layout {
+.donut-skeleton {
   display: flex;
   align-items: center;
   gap: 1.75rem;
 }
 
-.donut-chart {
-  position: relative;
+.donut-skeleton__circle {
   width: 148px;
   height: 148px;
-  flex-shrink: 0;
-}
-
-.donut-chart--skeleton {
   border-radius: 50%;
+  flex-shrink: 0;
   animation: pulse 1.4s ease-in-out infinite;
 }
 
-.donut-chart__ring {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-}
-
-.donut-chart__hole {
-  position: absolute;
-  inset: 22px;
-  border-radius: 50%;
-  background: var(--color-surface);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: 0.125rem;
-}
-
-.donut-chart__total {
-  font-size: 1.125rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--color-text-primary);
-}
-
-.donut-chart__total-label {
-  font-size: 0.6875rem;
-  color: var(--color-text-tertiary);
-}
-
-.donut-legend {
+.donut-skeleton__legend {
   flex: 1;
-  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
 }
 
-.donut-legend__row {
-  display: grid;
-  grid-template-columns: auto 1fr auto auto;
-  align-items: center;
-  gap: 0.625rem;
-  font-size: 0.8125rem;
-}
-
-.donut-legend__row--skeleton {
-  min-height: 14px;
+.donut-skeleton__row {
+  height: 14px;
   border-radius: var(--radius-sm);
   animation: pulse 1.4s ease-in-out infinite;
-}
-
-.donut-legend__swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
-.donut-legend__label {
-  color: var(--color-text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.donut-legend__percent {
-  color: var(--color-text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
-.donut-legend__amount {
-  color: var(--color-text-primary);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-@media (max-width: 480px) {
-  .donut-layout {
-    flex-direction: column;
-    align-items: flex-start;
-  }
 }
 
 .month-compare {
@@ -717,6 +665,56 @@
 
 /* Transactions */
 
+.transaction-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.transaction-filters__search {
+  flex: 1;
+  min-width: 200px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.transaction-filters__search::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.transaction-filters__search:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-muted);
+}
+
+.transaction-filters__category {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  outline: none;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.transaction-filters__category:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-muted);
+}
+
 .transaction-list {
   display: flex;
   flex-direction: column;
@@ -803,13 +801,6 @@
   color: var(--color-text-tertiary);
 }
 
-.amount--debit {
-  color: var(--color-danger);
-}
-
-.amount--credit {
-  color: var(--color-text-primary);
-}
 
 /* Pagination */
 
@@ -863,14 +854,4 @@
   color: var(--color-text-secondary);
   font-size: 0.9375rem;
   max-width: 360px;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    background-color: var(--color-surface);
-  }
-  50% {
-    background-color: var(--color-surface-raised);
-  }
 }

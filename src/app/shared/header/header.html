@@ -1,0 +1,10 @@
+<header class="app-header">
+  <span class="app-header__mark">FP</span>
+
+  <nav class="app-header__nav">
+    <a routerLink="/dashboard" routerLinkActive="app-header__link--active" class="app-header__link">Dashboard</a>
+    <a routerLink="/investments" routerLinkActive="app-header__link--active" class="app-header__link">Investments</a>
+  </nav>
+
+  <button type="button" class="btn-ghost" (click)="logout()">Sign out</button>
+</header>

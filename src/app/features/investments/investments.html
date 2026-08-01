@@ -1,0 +1,215 @@
+<div class="investments">
+  <app-header />
+
+  <main class="investments__content">
+    @if (loading()) {
+      <section class="investments__header investments__header--skeleton"></section>
+      <section class="investments__card">
+        @for (i of [1, 2, 3, 4, 5]; track i) {
+          <div class="holding-bar-row--skeleton"></div>
+        }
+      </section>
+      <section class="investments__card">
+        @for (i of [1, 2, 3, 4]; track i) {
+          <div class="holdings-table__row-skeleton"></div>
+        }
+      </section>
+    } @else if (error()) {
+      <div class="investments__alert">{{ error() }}</div>
+    } @else if (holdings().length === 0) {
+      <div class="empty-state">
+        <div class="empty-state__mark">FP</div>
+        <h2>No investments yet</h2>
+        <p>Once you connect a brokerage account, your holdings will show up here.</p>
+        <a routerLink="/dashboard" class="btn-ghost">Back to dashboard</a>
+      </div>
+    } @else {
+      <div class="investments__controls">
+        <label class="investments__account-select-label" for="account-select">Viewing</label>
+        <select id="account-select" class="account-select" (change)="onAccountSelect($event)">
+          <option value="" [selected]="!selectedAccountId()">All Portfolio</option>
+          @for (option of accountOptions(); track option.accountId) {
+            <option [value]="option.accountId" [selected]="selectedAccountId() === option.accountId">
+              {{ option.accountName }} — {{ option.institutionName }}
+            </option>
+          }
+        </select>
+      </div>
+
+      <section class="investments__header">
+        <div class="investments__header-stat">
+          <span class="investments__header-label">Total Portfolio Value</span>
+          <span class="investments__header-value">{{ totalCurrentValue() | currency: 'USD' }}</span>
+        </div>
+        <div class="investments__header-stat">
+          <span class="investments__header-label">Total Gain/Loss</span>
+          <span
+            class="investments__header-value"
+            [class.amount--debit]="totalGainLoss() < 0"
+            [class.amount--credit]="totalGainLoss() >= 0"
+          >
+            {{ totalGainLoss() >= 0 ? '+' : '' }}{{ totalGainLoss() | currency: 'USD' }}
+            ({{ totalGainLossPercent() >= 0 ? '+' : '' }}{{ totalGainLossPercent() | number: '1.2-2' }}%)
+          </span>
+        </div>
+      </section>
+
+      <section class="investments__card">
+        <h2>Top 5 Holdings</h2>
+        <div class="holding-bar-list">
+          @for (holding of topHoldings(); track holding.id) {
+            <div class="holding-bar-row">
+              <div class="holding-bar-row__header">
+                <div class="holding-bar-row__identity">
+                  <span class="holding-bar-row__name">{{ holding.name }}</span>
+                  <span class="holding-bar-row__symbol">{{ holding.symbol }}</span>
+                </div>
+                <div class="holding-bar-row__figures">
+                  <span class="holding-bar-row__value">{{ holding.currentValue | currency: 'USD' }}</span>
+                  <span
+                    class="holding-bar-row__gain"
+                    [class.amount--debit]="holding.gainLoss < 0"
+                    [class.amount--credit]="holding.gainLoss >= 0"
+                  >
+                    {{ holding.gainLoss >= 0 ? '+' : '' }}{{ holding.gainLoss | currency: 'USD' }}
+                    ({{ holding.gainLossPercent >= 0 ? '+' : '' }}{{ holding.gainLossPercent | number: '1.2-2' }}%)
+                  </span>
+                </div>
+              </div>
+              <div class="holding-bar-row__track">
+                <div class="holding-bar-row__fill" [style.width.%]="topHoldingBarWidth(holding.currentValue)"></div>
+              </div>
+            </div>
+          }
+        </div>
+      </section>
+
+      <section class="investments__card">
+        <div class="investments__table-header">
+          <h2>Holdings</h2>
+          @if (hasMultipleAccounts()) {
+            <div class="view-toggle">
+              <button
+                type="button"
+                class="view-toggle__btn"
+                [class.view-toggle__btn--active]="viewMode() === 'grouped'"
+                (click)="setViewMode('grouped')"
+              >
+                By Account
+              </button>
+              <button
+                type="button"
+                class="view-toggle__btn"
+                [class.view-toggle__btn--active]="viewMode() === 'combined'"
+                (click)="setViewMode('combined')"
+              >
+                Combined
+              </button>
+            </div>
+          }
+        </div>
+
+        <ng-template #tableHead>
+          <div class="holdings-table__head">
+            <button type="button" class="holdings-table__th" (click)="setSortColumn('symbol')">
+              Symbol <span class="holdings-table__sort">{{ sortIndicator('symbol') }}</span>
+            </button>
+            <button type="button" class="holdings-table__th holdings-table__th--name" (click)="setSortColumn('name')">
+              Name <span class="holdings-table__sort">{{ sortIndicator('name') }}</span>
+            </button>
+            <button type="button" class="holdings-table__th holdings-table__th--num" (click)="setSortColumn('shares')">
+              Shares <span class="holdings-table__sort">{{ sortIndicator('shares') }}</span>
+            </button>
+            <button
+              type="button"
+              class="holdings-table__th holdings-table__th--num"
+              (click)="setSortColumn('currentValue')"
+            >
+              Value <span class="holdings-table__sort">{{ sortIndicator('currentValue') }}</span>
+            </button>
+            <button type="button" class="holdings-table__th holdings-table__th--num" (click)="setSortColumn('costBasis')">
+              Cost Basis <span class="holdings-table__sort">{{ sortIndicator('costBasis') }}</span>
+            </button>
+            <button type="button" class="holdings-table__th holdings-table__th--num" (click)="setSortColumn('gainLoss')">
+              Gain/Loss <span class="holdings-table__sort">{{ sortIndicator('gainLoss') }}</span>
+            </button>
+            <button
+              type="button"
+              class="holdings-table__th holdings-table__th--num"
+              (click)="setSortColumn('portfolioPercent')"
+            >
+              % Portfolio <span class="holdings-table__sort">{{ sortIndicator('portfolioPercent') }}</span>
+            </button>
+          </div>
+        </ng-template>
+
+        <ng-template #tableRow let-row>
+          <div class="holdings-table__row">
+            <span class="holdings-table__cell">{{ row.symbol }}</span>
+            <span class="holdings-table__cell holdings-table__cell--name">{{ row.name }}</span>
+            <span class="holdings-table__cell holdings-table__cell--num">{{ row.shares | number: '1.2-6' }}</span>
+            <span class="holdings-table__cell holdings-table__cell--num">{{ row.currentValue | currency: 'USD' }}</span>
+            <span class="holdings-table__cell holdings-table__cell--num">{{ row.costBasis | currency: 'USD' }}</span>
+            <span class="holdings-table__cell holdings-table__cell--num">
+              <span class="holdings-table__gain" [class.amount--debit]="row.gainLoss < 0" [class.amount--credit]="row.gainLoss >= 0">
+                {{ row.gainLoss >= 0 ? '+' : '' }}{{ row.gainLoss | currency: 'USD' }}
+              </span>
+              <span
+                class="holdings-table__gain-percent"
+                [class.amount--debit]="row.gainLoss < 0"
+                [class.amount--credit]="row.gainLoss >= 0"
+              >
+                {{ row.gainLossPercent >= 0 ? '+' : '' }}{{ row.gainLossPercent | number: '1.2-2' }}%
+              </span>
+            </span>
+            <span class="holdings-table__cell holdings-table__cell--num">{{ row.portfolioPercent | number: '1.1-1' }}%</span>
+          </div>
+        </ng-template>
+
+        @if (viewMode() === 'combined' || !hasMultipleAccounts()) {
+          <div class="holdings-table">
+            <ng-container [ngTemplateOutlet]="tableHead" />
+            @for (row of sortedHoldings(); track row.id) {
+              <ng-container [ngTemplateOutlet]="tableRow" [ngTemplateOutletContext]="{ $implicit: row }" />
+            }
+          </div>
+        } @else {
+          <div class="account-groups">
+            @for (group of accountGroups(); track group.accountId) {
+              <div class="account-group">
+                <button type="button" class="account-group__header" (click)="toggleAccount(group.accountId)">
+                  <svg
+                    class="account-group__chevron"
+                    [class.account-group__chevron--collapsed]="isAccountCollapsed(group.accountId)"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                  <span class="account-group__name">{{ group.accountName }}</span>
+                  <span class="account-group__institution">{{ group.institutionName }}</span>
+                  <span class="account-group__subtotal">{{ group.totalValue | currency: 'USD' }}</span>
+                </button>
+
+                @if (!isAccountCollapsed(group.accountId)) {
+                  <div class="holdings-table">
+                    <ng-container [ngTemplateOutlet]="tableHead" />
+                    @for (row of group.holdings; track row.id) {
+                      <ng-container [ngTemplateOutlet]="tableRow" [ngTemplateOutletContext]="{ $implicit: row }" />
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      </section>
+    }
+  </main>
+</div>

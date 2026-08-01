@@ -1,0 +1,20 @@
+<div class="donut-layout">
+  <div class="donut-chart">
+    <div class="donut-chart__ring" [style.background]="gradient()"></div>
+    <div class="donut-chart__hole">
+      <span class="donut-chart__total">{{ centerValue() }}</span>
+      <span class="donut-chart__total-label">{{ centerLabel() }}</span>
+    </div>
+  </div>
+
+  <div class="donut-legend">
+    @for (segment of segments(); track segment.label) {
+      <div class="donut-legend__row">
+        <span class="donut-legend__swatch" [style.background]="segment.color"></span>
+        <span class="donut-legend__label">{{ segment.label }}</span>
+        <span class="donut-legend__percent">{{ segment.percent | number: '1.0-0' }}%</span>
+        <span class="donut-legend__amount">{{ segment.total | currency: 'USD' : 'symbol' : '1.0-0' }}</span>
+      </div>
+    }
+  </div>
+</div>

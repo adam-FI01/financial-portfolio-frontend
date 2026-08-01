@@ -70,3 +70,47 @@ button {
 input {
   font-family: inherit;
 }
+
+/* Shared utility classes — used across multiple feature components */
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--color-text-secondary);
+  color: var(--color-text-primary);
+}
+
+.btn-ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.amount--debit {
+  color: var(--color-danger);
+}
+
+.amount--credit {
+  color: var(--color-text-primary);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    background-color: var(--color-surface);
+  }
+  50% {
+    background-color: var(--color-surface-raised);
+  }
+}

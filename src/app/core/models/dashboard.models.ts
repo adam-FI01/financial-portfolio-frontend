@@ -16,7 +16,24 @@ export interface Account {
   type: AccountType;
   currentBalance: number;
   availableBalance: number | null;
+  creditLimit: number | null;
   currency: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Holding {
+  id: string;
+  accountId: string;
+  accountName: string;
+  institutionName: string;
+  symbol: string;
+  name: string;
+  shares: number;
+  costBasis: number;
+  currentValue: number;
+  gainLoss: number;
+  gainLossPercent: number;
   createdAt: string;
   updatedAt: string;
 }

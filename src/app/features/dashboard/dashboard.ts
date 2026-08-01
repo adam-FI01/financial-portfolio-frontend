@@ -1,11 +1,24 @@
 import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
-import { Router } from '@angular/router';
-import { forkJoin } from 'rxjs';
+import { Router, RouterLink } from '@angular/router';
+import { Subject, Subscription, debounceTime, distinctUntilChanged, forkJoin } from 'rxjs';
 
 import { AuthService } from '../../core/services/auth.service';
 import { DashboardService } from '../../core/services/dashboard.service';
-import { Account, AccountType, Institution, PageResponse, Transaction } from '../../core/models/dashboard.models';
+import {
+  Account,
+  AccountType,
+  Holding,
+  Institution,
+  PageResponse,
+  Transaction
+} from '../../core/models/dashboard.models';
+import { DONUT_COLORS, DONUT_OTHER_COLOR, DonutChart, DonutSegment } from '../../shared/donut-chart/donut-chart';
+import { Header } from '../../shared/header/header';
+
+const SEARCH_DEBOUNCE_MS = 350;
+const HIGH_UTILIZATION_THRESHOLD = 70;
+const TOP_HOLDINGS_PREVIEW_COUNT = 3;
 
 const PAGE_SIZE = 20;
 const ASSET_TYPES: AccountType[] = ['CHECKING', 'SAVINGS', 'INVESTMENT'];
@@ -24,27 +37,6 @@ interface CategoryTotal {
   total: number;
 }
 
-interface DonutSegment {
-  category: string;
-  total: number;
-  percent: number;
-  color: string;
-}
-
-// Validated categorical palette (dark-mode steps), skipping the palette's green
-// slot since green is reserved elsewhere in this app for CTAs/success states.
-// Passes all six dataviz checks (lightness, chroma, CVD, contrast) against our
-// dark surface — see the palette validation run for this feature.
-const DONUT_COLORS = [
-  '#3987e5', // blue
-  '#d95926', // orange
-  '#199e70', // aqua
-  '#c98500', // yellow
-  '#d55181', // magenta
-  '#9085e9', // violet
-  '#e66767' // red
-];
-const DONUT_OTHER_COLOR = '#6b7280'; // neutral gray — matches --color-text-tertiary
 const DONUT_MAX_SEGMENTS = DONUT_COLORS.length;
 
 type AccountFilterValue = 'ALL' | AccountType;
@@ -58,6 +50,12 @@ interface InstitutionGroup {
   institution: Institution;
   accounts: Account[];
   subtotal: number;
+}
+
+interface CreditUtilization {
+  percent: number;
+  balanceMagnitude: number;
+  limit: number;
 }
 
 const ACCOUNT_FILTERS: AccountFilterOption[] = [
@@ -88,7 +86,7 @@ function currentMonthKey(): string {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CurrencyPipe, DatePipe, DecimalPipe],
+  imports: [CurrencyPipe, DatePipe, DecimalPipe, RouterLink, Header, DonutChart],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss'
 })
@@ -115,10 +113,18 @@ export class Dashboard implements OnInit, OnDestroy {
   readonly hasLoadedTransactionsOnce = signal(false);
   readonly transactionsError = signal<string | null>(null);
   readonly currentPage = signal(0);
+  readonly searchQuery = signal('');
+  readonly selectedCategory = signal<string | null>(null);
+
+  private readonly searchInput$ = new Subject<string>();
+  private searchSubscription?: Subscription;
 
   readonly allTransactions = signal<Transaction[]>([]);
   readonly loadingInsights = signal(true);
   readonly insightsError = signal<string | null>(null);
+
+  readonly holdings = signal<Holding[]>([]);
+  readonly loadingHoldings = signal(true);
 
   readonly accountFilters = ACCOUNT_FILTERS;
   readonly accountFilter = signal<AccountFilterValue>('ALL');
@@ -126,6 +132,30 @@ export class Dashboard implements OnInit, OnDestroy {
 
   readonly hasAccounts = computed(() => this.accounts().length > 0);
   readonly accountsById = computed(() => new Map(this.accounts().map((a) => [a.id, a])));
+
+  readonly holdingsByAccountId = computed(() => {
+    const map = new Map<string, Holding[]>();
+    for (const holding of this.holdings()) {
+      const list = map.get(holding.accountId) ?? [];
+      list.push(holding);
+      map.set(holding.accountId, list);
+    }
+    return map;
+  });
+
+  readonly availableCategories = computed(() => {
+    const categories = new Set<string>();
+    for (const t of this.allTransactions()) {
+      if (t.category) {
+        categories.add(t.category);
+      }
+    }
+    return [...categories].sort();
+  });
+
+  readonly hasActiveTransactionFilters = computed(
+    () => this.searchQuery().trim() !== '' || this.selectedCategory() !== null
+  );
 
   readonly filteredAccounts = computed(() => {
     const filter = this.accountFilter();
@@ -189,7 +219,7 @@ export class Dashboard implements OnInit, OnDestroy {
 
     const primaryCount = Math.min(rows.length, DONUT_MAX_SEGMENTS);
     const segments = rows.slice(0, primaryCount).map((row, i) => ({
-      category: row.category,
+      label: row.category,
       total: row.total,
       percent: (row.total / total) * 100,
       color: DONUT_COLORS[i]
@@ -199,7 +229,7 @@ export class Dashboard implements OnInit, OnDestroy {
     if (rest.length > 0) {
       const restTotal = rest.reduce((sum, row) => sum + row.total, 0);
       segments.push({
-        category: 'Other',
+        label: 'Other',
         total: restTotal,
         percent: (restTotal / total) * 100,
         color: DONUT_OTHER_COLOR
@@ -207,32 +237,6 @@ export class Dashboard implements OnInit, OnDestroy {
     }
 
     return segments;
-  });
-
-  readonly donutGradient = computed(() => {
-    const segments = this.donutSegments();
-    if (segments.length === 0) {
-      return 'transparent';
-    }
-    if (segments.length === 1) {
-      return segments[0].color;
-    }
-
-    const gapDeg = 2.5;
-    let cursor = 0;
-    const stops: string[] = [];
-
-    for (const segment of segments) {
-      const sweep = (segment.percent / 100) * 360;
-      const start = cursor;
-      const end = cursor + sweep;
-      const gapStart = Math.max(start, end - gapDeg);
-      stops.push(`${segment.color} ${start}deg ${gapStart}deg`);
-      stops.push(`var(--color-surface) ${gapStart}deg ${end}deg`);
-      cursor = end;
-    }
-
-    return `conic-gradient(${stops.join(', ')})`;
   });
 
   readonly monthComparison = computed<MonthComparison>(() => {
@@ -272,12 +276,21 @@ export class Dashboard implements OnInit, OnDestroy {
     this.loadStartedAt = Date.now();
     this.startLoaderPhraseCycle();
     this.loadAccounts();
+
+    this.searchSubscription = this.searchInput$
+      .pipe(debounceTime(SEARCH_DEBOUNCE_MS), distinctUntilChanged())
+      .subscribe((value) => {
+        this.searchQuery.set(value);
+        this.currentPage.set(0);
+        this.loadTransactions(0);
+      });
   }
 
   ngOnDestroy(): void {
     clearInterval(this.phraseIntervalId);
     clearTimeout(this.dismissTimeoutId);
     clearTimeout(this.removeLoaderTimeoutId);
+    this.searchSubscription?.unsubscribe();
   }
 
   logout(): void {
@@ -349,6 +362,36 @@ export class Dashboard implements OnInit, OnDestroy {
     this.loadTransactions(page);
   }
 
+  creditUtilization(account: Account): CreditUtilization | null {
+    if (account.type !== 'CREDIT_CARD' || !account.creditLimit || account.creditLimit <= 0) {
+      return null;
+    }
+    const balanceMagnitude = Math.abs(account.currentBalance);
+    const percent = Math.min((balanceMagnitude / account.creditLimit) * 100, 100);
+    return { percent, balanceMagnitude, limit: account.creditLimit };
+  }
+
+  isHighUtilization(utilization: CreditUtilization): boolean {
+    return utilization.percent >= HIGH_UTILIZATION_THRESHOLD;
+  }
+
+  topHoldingsForAccount(accountId: string): Holding[] {
+    const holdings = this.holdingsByAccountId().get(accountId) ?? [];
+    return [...holdings].sort((a, b) => b.currentValue - a.currentValue).slice(0, TOP_HOLDINGS_PREVIEW_COUNT);
+  }
+
+  onSearchInput(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.searchInput$.next(value);
+  }
+
+  onCategoryChange(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    this.selectedCategory.set(value || null);
+    this.currentPage.set(0);
+    this.loadTransactions(0);
+  }
+
   private startLoaderPhraseCycle(): void {
     let index = 0;
     this.phraseIntervalId = setInterval(() => {
@@ -390,12 +433,19 @@ export class Dashboard implements OnInit, OnDestroy {
           this.loadingTransactions.set(false);
           this.loadingInsights.set(false);
         }
+
+        if (accounts.some((a) => a.type === 'INVESTMENT')) {
+          this.loadHoldings();
+        } else {
+          this.loadingHoldings.set(false);
+        }
       },
       error: () => {
         this.accountsError.set("Couldn't load your accounts. Please try again.");
         this.loadingAccounts.set(false);
         this.loadingTransactions.set(false);
         this.loadingInsights.set(false);
+        this.loadingHoldings.set(false);
         this.dismissIntroLoaderWhenReady();
       }
     });
@@ -405,7 +455,10 @@ export class Dashboard implements OnInit, OnDestroy {
     this.loadingTransactions.set(true);
     this.transactionsError.set(null);
 
-    this.dashboardService.getTransactions(page, PAGE_SIZE).subscribe({
+    const search = this.searchQuery().trim() || undefined;
+    const category = this.selectedCategory() ?? undefined;
+
+    this.dashboardService.getTransactions(page, PAGE_SIZE, search, category).subscribe({
       next: (result) => {
         this.transactionsPage.set(result);
         this.loadingTransactions.set(false);
@@ -414,6 +467,20 @@ export class Dashboard implements OnInit, OnDestroy {
       error: () => {
         this.transactionsError.set("Couldn't load your transactions. Please try again.");
         this.loadingTransactions.set(false);
+      }
+    });
+  }
+
+  private loadHoldings(): void {
+    this.loadingHoldings.set(true);
+
+    this.dashboardService.getHoldings().subscribe({
+      next: (holdings) => {
+        this.holdings.set(holdings);
+        this.loadingHoldings.set(false);
+      },
+      error: () => {
+        this.loadingHoldings.set(false);
       }
     });
   }
