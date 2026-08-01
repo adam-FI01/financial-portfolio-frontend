@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { EMPTY, Observable, concatMap, expand, from, toArray } from 'rxjs';
 
 import { API_BASE_URL } from '../config/api.config';
-import { Account, Institution, PageResponse, Transaction } from '../models/dashboard.models';
+import { Account, Holding, Institution, PageResponse, Transaction } from '../models/dashboard.models';
 
 const INSIGHTS_PAGE_SIZE = 100;
 
@@ -19,8 +19,23 @@ export class DashboardService {
     return this.http.get<Account[]>(`${API_BASE_URL}/accounts`);
   }
 
-  getTransactions(page: number, size: number): Observable<PageResponse<Transaction>> {
-    const params = new HttpParams().set('page', page).set('size', size);
+  getHoldings(): Observable<Holding[]> {
+    return this.http.get<Holding[]>(`${API_BASE_URL}/holdings`);
+  }
+
+  getTransactions(
+    page: number,
+    size: number,
+    search?: string,
+    category?: string
+  ): Observable<PageResponse<Transaction>> {
+    let params = new HttpParams().set('page', page).set('size', size);
+    if (search) {
+      params = params.set('search', search);
+    }
+    if (category) {
+      params = params.set('category', category);
+    }
     return this.http.get<PageResponse<Transaction>>(`${API_BASE_URL}/transactions`, { params });
   }
 
@@ -28,6 +43,7 @@ export class DashboardService {
    * Fetches every transaction by paging through the existing endpoint (no new
    * backend route) — used for aggregate insights that must cover the whole
    * dataset rather than just whatever page the transaction list is showing.
+   * Always unfiltered, regardless of the transaction list's active search/category.
    */
   getAllTransactions(): Observable<Transaction[]> {
     return this.getTransactions(0, INSIGHTS_PAGE_SIZE).pipe(
